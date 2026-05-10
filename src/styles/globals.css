@@ -1,0 +1,274 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* JetBrains Mono + Inter via Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+/* ── Hyper-Network Design Tokens ───────────────────────────────────────────── */
+:root {
+  /* Background */
+  --deep-navy:     #000814;
+  --navy-900:      #000d1f;
+  --navy-800:      #001430;
+  --navy-700:      #001d45;
+  --navy-600:      #002459;
+
+  /* Hyper-Network palette */
+  --indigo:        #4F46E5;   /* Electric Indigo — acento primario */
+  --indigo-dim:    rgba(79, 70, 229, 0.15);
+  --indigo-glow:   rgba(79, 70, 229, 0.55);
+
+  --cyan:          #06B6D4;   /* Cyber Cyan — telemetría / datos */
+  --cyan-dim:      rgba(6, 182, 212, 0.15);
+  --cyan-glow:     rgba(6, 182, 212, 0.5);
+
+  --rose:          #F43F5E;   /* Neon Rose — alertas / cyber threats */
+  --rose-dim:      rgba(244, 63, 94, 0.15);
+  --rose-glow:     rgba(244, 63, 94, 0.55);
+
+  --green:         #10B981;   /* Emerald Phosphor — estado OK */
+  --green-glow:    rgba(16, 185, 129, 0.5);
+
+  --amber:         #F59E0B;   /* Warning */
+  --red:           #ef4444;   /* Legacy */
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; padding: 0; margin: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--deep-navy);
+  color: #cbd5e1;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Dot grid (cada punto = 1px mapeado a la grilla de infraestructura) ────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  /* Capa 1: dot grid técnico */
+  background-image:
+    radial-gradient(circle, rgba(79, 70, 229, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Scanlines industriales (monitor CRT / instrumento de campo) ───────────── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.055) 2px,
+    rgba(0, 0, 0, 0.055) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* All content above pseudo-elements */
+#__next, main { position: relative; z-index: 2; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(79, 70, 229, 0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(79, 70, 229, 0.55); }
+
+/* ── Glassmorphism ─────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(0, 8, 28, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(79, 70, 229, 0.15);  /* indigo sutil */
+}
+
+.glass-strong {
+  background: rgba(0, 6, 20, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(79, 70, 229, 0.22);
+}
+
+/* Legacy alias */
+.glass-panel { @apply glass; }
+
+/* ── HUD corner brackets ───────────────────────────────────────────────────── */
+.hud-corners {
+  position: relative;
+}
+.hud-corners::before,
+.hud-corners::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(79, 70, 229, 0.6);   /* Electric Indigo */
+  border-style: solid;
+}
+.hud-corners::before {
+  top: 0; left: 0;
+  border-width: 1px 0 0 1px;
+}
+.hud-corners::after {
+  bottom: 0; right: 0;
+  border-width: 0 1px 1px 0;
+}
+
+/* ── Neon glow utilities ───────────────────────────────────────────────────── */
+.glow-indigo {
+  filter: drop-shadow(0 0 6px rgba(79, 70, 229, 0.8))
+          drop-shadow(0 0 18px rgba(79, 70, 229, 0.4));
+}
+.glow-cyan {
+  filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.7))
+          drop-shadow(0 0 14px rgba(6, 182, 212, 0.35));
+}
+.glow-rose {
+  filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.8))
+          drop-shadow(0 0 16px rgba(244, 63, 94, 0.4));
+}
+.glow-green {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.7))
+          drop-shadow(0 0 14px rgba(16, 185, 129, 0.35));
+}
+.glow-amber {
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.7))
+          drop-shadow(0 0 14px rgba(245, 158, 11, 0.35));
+}
+.glow-red {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.7))
+          drop-shadow(0 0 14px rgba(239, 68, 68, 0.35));
+}
+
+/* Text glow */
+.text-glow-indigo { text-shadow: 0 0 10px rgba(79, 70, 229, 0.9),  0 0 28px rgba(79, 70, 229, 0.5); }
+.text-glow-cyan   { text-shadow: 0 0 10px rgba(6, 182, 212, 0.8),  0 0 25px rgba(6, 182, 212, 0.4); }
+.text-glow-rose   { text-shadow: 0 0 10px rgba(244, 63, 94, 0.9),  0 0 28px rgba(244, 63, 94, 0.5); }
+.text-glow-green  { text-shadow: 0 0 10px rgba(16, 185, 129, 0.8), 0 0 25px rgba(16, 185, 129, 0.4); }
+.text-glow-amber  { text-shadow: 0 0 10px rgba(245, 158, 11, 0.8), 0 0 25px rgba(245, 158, 11, 0.4); }
+.text-glow-red    { text-shadow: 0 0 10px rgba(239, 68, 68, 0.8),  0 0 25px rgba(239, 68, 68, 0.4); }
+
+/* Border glow */
+.border-glow-indigo { box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.4),  inset 0 0 24px rgba(79, 70, 229, 0.04); }
+.border-glow-cyan   { box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.3),  inset 0 0 20px rgba(6, 182, 212, 0.03); }
+.border-glow-rose   { box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.4),  inset 0 0 24px rgba(244, 63, 94, 0.04); }
+.border-glow-green  { box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3), inset 0 0 20px rgba(16, 185, 129, 0.03); }
+.border-glow-amber  { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3), inset 0 0 20px rgba(245, 158, 11, 0.03); }
+.border-glow-red    { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3),  inset 0 0 20px rgba(239, 68, 68, 0.03); }
+
+/* ── HUD separator line ────────────────────────────────────────────────────── */
+.hud-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(79, 70, 229, 0.4), rgba(6, 182, 212, 0.3), transparent);
+}
+
+/* ── Ping animation for SVG nodes (CSS-driven) ─────────────────────────────── */
+@keyframes svgPing {
+  0%   { r: 0; opacity: 0.6; }
+  100% { r: 40; opacity: 0; }
+}
+
+/* ── Blinking cursor indicator ─────────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.blink { animation: blink 1.2s step-end infinite; }
+
+/* ── Status indicator dot ──────────────────────────────────────────────────── */
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+.status-dot { animation: statusPulse 2s ease-in-out infinite; }
+
+/* ── Slide-in for panels ───────────────────────────────────────────────────── */
+@keyframes slideInLeft {
+  from { transform: translateX(-8px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.slide-in { animation: slideInLeft 0.25s ease-out forwards; }
+
+/* ── Scan-in: panel aparece como si un láser lo dibujara de arriba a abajo ─── */
+@keyframes scanIn {
+  0%   { clip-path: inset(0 0 100% 0); opacity: 0;   }
+  15%  { opacity: 0.8; }
+  100% { clip-path: inset(0 0 0% 0);   opacity: 1;   }
+}
+.scan-in {
+  animation: scanIn 0.28s steps(10, end) both;
+}
+
+/* ── Blink-on: aparición binaria (0→1 sin suavizado) ──────────────────────── */
+@keyframes blinkOn {
+  0%, 30%, 60% { opacity: 0; }
+  15%, 45%, 80%, 100% { opacity: 1; }
+}
+.blink-on {
+  animation: blinkOn 0.22s steps(4, end) both;
+}
+
+/* ── Scan line sweep (decorativo sobre paneles) ────────────────────────────── */
+@keyframes scanSweep {
+  0%   { top: -2px; opacity: 0.6; }
+  100% { top: 100%; opacity: 0; }
+}
+.scan-sweep::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(79,70,229,0.6), rgba(6,182,212,0.4), transparent);
+  pointer-events: none;
+  animation: scanSweep 2.5s linear infinite;
+}
+
+/* ── Mono data display ─────────────────────────────────────────────────────── */
+.data-value {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: 0.02em;
+}
+
+/* JetBrains Mono global para elementos técnicos */
+.font-mono, code, kbd, samp, pre {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── HUD Input — campos de formulario técnico ──────────────────────────────── */
+.hud-input {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  background: rgba(0, 6, 20, 0.7);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: rgba(226, 232, 240, 0.85);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.hud-input:focus {
+  border-color: rgba(79, 70, 229, 0.55);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.08);
+}
+.hud-input::placeholder {
+  color: rgba(71, 85, 105, 0.45);
+}
+.hud-input option {
+  background: #000814;
+  color: rgba(226, 232, 240, 0.85);
+}
