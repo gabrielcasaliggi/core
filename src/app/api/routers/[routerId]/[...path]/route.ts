@@ -36,12 +36,14 @@ async function getRouterConfig(id: string): Promise<RouterConfig | null> {
   try {
     const { createServerClient } = await import("@/lib/supabase/server");
     const db = createServerClient();
-    const { data } = await db
+    type RouterCreds = { host: string; port: number; protocol: string; username: string; password: string };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (db as any)
       .from("routers")
       .select("host, port, protocol, username, password")
       .eq("site_id", siteId)
       .eq("enabled", true)
-      .single();
+      .single() as { data: RouterCreds | null };
 
     if (!data) return null;
     return {

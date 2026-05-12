@@ -58,24 +58,35 @@ export interface AlertRow {
   acknowledged_by: string | null;
 }
 
+type RouterInsert = Omit<RouterRow, "id" | "created_at" | "updated_at"> & Partial<Pick<RouterRow, "id" | "created_at" | "updated_at">>;
+type JobInsert    = Omit<ProvisioningJobRow, "id" | "started_at"> & Partial<Pick<ProvisioningJobRow, "id" | "started_at">>;
+type AlertInsert  = Omit<AlertRow, "id" | "created_at"> & Partial<Pick<AlertRow, "id" | "created_at">>;
+
 export interface Database {
   public: {
     Tables: {
       routers: {
         Row:    RouterRow;
-        Insert: Omit<RouterRow, "id" | "created_at" | "updated_at"> & Partial<Pick<RouterRow, "id" | "created_at" | "updated_at">>;
+        Insert: RouterInsert;
         Update: Partial<Omit<RouterRow, "id">>;
+        Relationships: [];
       };
       provisioning_jobs: {
         Row:    ProvisioningJobRow;
-        Insert: Omit<ProvisioningJobRow, "id" | "started_at"> & Partial<Pick<ProvisioningJobRow, "id" | "started_at">>;
+        Insert: JobInsert;
         Update: Partial<Omit<ProvisioningJobRow, "id">>;
+        Relationships: [];
       };
       alerts: {
         Row:    AlertRow;
-        Insert: Omit<AlertRow, "id" | "created_at"> & Partial<Pick<AlertRow, "id" | "created_at">>;
+        Insert: AlertInsert;
         Update: Partial<Omit<AlertRow, "id">>;
+        Relationships: [];
       };
     };
+    Views:          Record<string, never>;
+    Functions:      Record<string, never>;
+    Enums:          Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }

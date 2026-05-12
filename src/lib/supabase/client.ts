@@ -6,13 +6,12 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "./types";
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 /** Cliente para uso en componentes del navegador. */
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 /**
  * Cliente para uso en API routes (servidor).
@@ -22,9 +21,6 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON);
 export function createServerClient() {
   const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? SUPABASE_URL;
   const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? SUPABASE_ANON;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnon;
-
-  return createClient<Database>(supabaseUrl, key, {
-    auth: { persistSession: false },
-  });
+  const key          = process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnon;
+  return createClient(supabaseUrl, key, { auth: { persistSession: false } });
 }

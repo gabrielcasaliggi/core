@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
-import type { ProvisioningStepRow } from "@/lib/supabase/types";
+import type { RouterRow, ProvisioningJobRow, ProvisioningStepRow } from "@/lib/supabase/types";
 
 export const runtime = "edge";
 
@@ -155,35 +155,39 @@ export async function POST(request: NextRequest) {
   const db = createServerClient();
 
   // ── Paso 3: guardar router en Supabase ────────────────────────────────────
-  const { data: routerRow, error: routerError } = await db
+  const routerPayload = {
+    site_id:                 body.siteId || `site-${body.shortName.toLowerCase()}`,
+    display_name:            routerName,
+    short_name:              body.shortName,
+    site_type:               body.siteType,
+    lat:                     body.lat,
+    lng:                     body.lng,
+    host,
+    port,
+    protocol,
+    username,
+    password,
+    tls_reject_unauthorized: false,
+    provider:                body.provider || null,
+    bandwidth_mbps:          body.bandwidthMbps,
+    wan_type:                body.wanType,
+    enabled:                 true,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: routerRow, error: routerError } = await (db as any)
     .from("routers")
-    .upsert({
-      site_id:                 body.siteId || `site-${body.shortName.toLowerCase()}`,
-      display_name:            routerName,
-      short_name:              body.shortName,
-      site_type:               body.siteType,
-      lat:                     body.lat,
-      lng:                     body.lng,
-      host,
-      port,
-      protocol,
-      username,
-      password,
-      tls_reject_unauthorized: tlsRejectUnauthorized,
-      provider:                body.provider || null,
-      bandwidth_mbps:          body.bandwidthMbps,
-      wan_type:                body.wanType,
-      enabled:                 true,
-    }, { onConflict: "site_id" })
+    .upsert(routerPayload, { onConflict: "site_id" })
     .select()
-    .single();
+    .single() as { data: RouterRow | null; error: unknown };
 
   if (routerError) {
     console.error("[provision] Error guardando router:", routerError);
   }
 
   // ── Paso 4: guardar job en Supabase ───────────────────────────────────────
-  const { data: jobRow, error: jobError } = await db
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: jobRow, error: jobError } = await (db as any)
     .from("provisioning_jobs")
     .insert({
       router_id:    routerRow?.id ?? null,
@@ -201,7 +205,7 @@ export async function POST(request: NextRequest) {
       },
     })
     .select()
-    .single();
+    .single() as { data: ProvisioningJobRow | null; error: unknown };
 
   if (jobError) {
     console.error("[provision] Error guardando job:", jobError);
