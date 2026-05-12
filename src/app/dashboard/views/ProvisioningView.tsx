@@ -236,7 +236,16 @@ export default function ProvisioningView() {
         }),
       });
 
-      const data = await res.json() as { success?: boolean; error?: string; job?: ProvisioningJobRow };
+      let data: { success?: boolean; error?: string; job?: ProvisioningJobRow };
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `La API no está disponible (HTTP ${res.status}). ` +
+          `Verificá que las edge functions estén desplegadas en Cloudflare Pages ` +
+          `y que el build command sea "npm run build:cf".`
+        );
+      }
+      data = await res.json() as { success?: boolean; error?: string; job?: ProvisioningJobRow };
 
       if (!res.ok || !data.success) {
         throw new Error(data.error ?? "Error en provisioning");
