@@ -1,58 +1,44 @@
 /**
- * Proxy multi-router genérico: reenvía requests GET a la RouterOS REST API
- * del router identificado por `routerId`.
- *
- * Configuración en .env.local (reemplazar NOMBRE por el ID del router):
- *   ROUTER_NOMBRE_HOST=192.168.1.1
- *   ROUTER_NOMBRE_PROTOCOL=http          # http | https
- *   ROUTER_NOMBRE_PORT=80
- *   ROUTER_NOMBRE_USER=vertia-api
- *   ROUTER_NOMBRE_PASS=secreto
- *   ROUTER_NOMBRE_TLS_REJECT_UNAUTHORIZED=false   # solo para https con cert auto-firmado
- *
- * Ejemplo de llamada:
- *   GET /api/routers/hq/system/identity
- *        → lee ROUTER_HQ_* del entorno
- *        → https://<ROUTER_HQ_HOST>/rest/system/identity
+ * Proxy multi-router: reenvía requests a RouterOS por routerId.
+ * Busca credenciales en env vars primero, luego en Supabase.
+ * Compatible con Cloudflare Pages (Edge Runtime).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 type Params = Promise<{ routerId: string; path: string[] }>;
 
 interface RouterConfig {
   host: string; user: string; pass: string;
-  protocol: string; port: string; rejectTls: boolean;
+  protocol: string; port: string;
 }
 
 async function getRouterConfig(id: string): Promise<RouterConfig | null> {
-  // 1️⃣  Intentar variables de entorno primero (ROUTER_<ID>_*)
-  const prefix   = `ROUTER_${id.toUpperCase()}_`;
-  const envHost  = process.env[`${prefix}HOST`];
-  const envUser  = process.env[`${prefix}USER`];
-  const envPass  = process.env[`${prefix}PASS`];
+  // 1️⃣  Variables de entorno (ROUTER_<ID>_*)
+  const prefix  = `ROUTER_${id.toUpperCase()}_`;
+  const envHost = process.env[`${prefix}HOST`];
+  const envUser = process.env[`${prefix}USER`];
+  const envPass = process.env[`${prefix}PASS`];
 
   if (envHost && envUser && envPass) {
-    const protocol = process.env[`${prefix}PROTOCOL`] ?? "https";
+    const protocol = process.env[`${prefix}PROTOCOL`] ?? "http";
     return {
       host: envHost, user: envUser, pass: envPass,
       protocol,
-      port:      process.env[`${prefix}PORT`] ?? (protocol === "http" ? "80" : "443"),
-      rejectTls: process.env[`${prefix}TLS_REJECT_UNAUTHORIZED`] !== "false",
+      port: process.env[`${prefix}PORT`] ?? (protocol === "http" ? "80" : "443"),
     };
   }
 
-  // 2️⃣  Fallback: leer credenciales de Supabase por site_id
-  //     El routerId puede ser "site-hq" o simplemente "hq" → normalizamos
+  // 2️⃣  Fallback: Supabase
   const siteId = id.startsWith("site-") ? id : `site-${id}`;
   try {
     const { createServerClient } = await import("@/lib/supabase/server");
     const db = createServerClient();
     const { data } = await db
       .from("routers")
-      .select("host, port, protocol, username, password, tls_reject_unauthorized")
+      .select("host, port, protocol, username, password")
       .eq("site_id", siteId)
       .eq("enabled", true)
       .single();
@@ -64,32 +50,9 @@ async function getRouterConfig(id: string): Promise<RouterConfig | null> {
       pass:     data.password,
       protocol: data.protocol,
       port:     String(data.port),
-      rejectTls: data.tls_reject_unauthorized,
     };
   } catch {
     return null;
-  }
-}
-
-async function routerFetch(
-  url: string,
-  auth: string,
-  protocol: string,
-  rejectTls: boolean,
-): Promise<Response> {
-  const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
-
-  if (protocol === "http" || rejectTls) {
-    return fetch(url, { headers, cache: "no-store" });
-  }
-
-  const prev = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  try {
-    return await fetch(url, { headers, cache: "no-store" });
-  } finally {
-    if (prev === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev;
   }
 }
 
@@ -99,11 +62,7 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
 
   if (!cfg) {
     return NextResponse.json(
-      {
-        error:
-          `Router "${routerId}" no encontrado. ` +
-          `Registrarlo via Provisioning o agregar ROUTER_${routerId.toUpperCase()}_* en .env.local`,
-      },
+      { error: `Router "${routerId}" no encontrado. Registrarlo via Provisioning.` },
       { status: 503 },
     );
   }
@@ -111,10 +70,13 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
   const routerPath = path.join("/");
   const query = request.nextUrl.searchParams.toString();
   const url = `${cfg.protocol}://${cfg.host}:${cfg.port}/rest/${routerPath}${query ? `?${query}` : ""}`;
-  const auth = Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
+  const auth = btoa(`${cfg.user}:${cfg.pass}`);
 
   try {
-    const res = await routerFetch(url, auth, cfg.protocol, cfg.rejectTls);
+    const res = await fetch(url, {
+      headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+      cache: "no-store",
+    });
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);

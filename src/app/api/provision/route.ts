@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import type { ProvisioningStepRow } from "@/lib/supabase/types";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 // ── Tipos de entrada ──────────────────────────────────────────────────────────
 
@@ -45,29 +45,14 @@ interface ProvisionPayload {
 async function routerFetch(
   host: string, port: number, protocol: string,
   user: string, pass: string,
-  rejectTls: boolean,
   path: string,
 ): Promise<unknown> {
   const url = `${protocol}://${host}:${port}/rest/${path}`;
-  const auth = Buffer.from(`${user}:${pass}`).toString("base64");
+  const auth = btoa(`${user}:${pass}`);
   const headers = { Authorization: `Basic ${auth}`, Accept: "application/json" };
-
-  if (protocol === "http" || rejectTls) {
-    const res = await fetch(url, { headers, cache: "no-store" });
-    if (!res.ok) throw new Error(`RouterOS ${res.status} en /${path}`);
-    return res.json();
-  }
-
-  const prev = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  try {
-    const res = await fetch(url, { headers, cache: "no-store" });
-    if (!res.ok) throw new Error(`RouterOS ${res.status} en /${path}`);
-    return res.json();
-  } finally {
-    if (prev === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev;
-  }
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error(`RouterOS ${res.status} en /${path}`);
+  return res.json();
 }
 
 // ── Pasos de aprovisionamiento ────────────────────────────────────────────────
@@ -117,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
   }
 
-  const { host, port, protocol, username, password, tlsRejectUnauthorized } = body;
+  const { host, port, protocol, username, password } = body;
 
   // ── Paso 1: validar conexión al router ────────────────────────────────────
   let routerName = body.siteName;
@@ -125,17 +110,17 @@ export async function POST(request: NextRequest) {
   let boardName  = "MikroTik";
 
   const targetUrl = `${protocol}://${host}:${port}/rest/system/identity`;
-  console.log(`[provision] Intentando conectar a: ${targetUrl} (user: ${username})`);
+  console.log(`[provision] Conectando a: ${targetUrl} (user: ${username})`);
   try {
-    const identity = await routerFetch(host, port, protocol, username, password, tlsRejectUnauthorized, "system/identity") as { name?: string };
-    const resource = await routerFetch(host, port, protocol, username, password, tlsRejectUnauthorized, "system/resource") as { version?: string; "board-name"?: string };
+    const identity = await routerFetch(host, port, protocol, username, password, "system/identity") as { name?: string };
+    const resource = await routerFetch(host, port, protocol, username, password, "system/resource") as { version?: string; "board-name"?: string };
     routerName = identity.name ?? body.siteName;
     rosVersion = resource.version ?? "—";
     boardName  = resource["board-name"] ?? "MikroTik";
-    console.log(`[provision] Conectado OK: ${boardName} RouterOS ${rosVersion}`);
+    console.log(`[provision] OK: ${boardName} RouterOS ${rosVersion}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[provision] Fallo de conexión a ${targetUrl}:`, msg);
+    console.error(`[provision] Error en ${targetUrl}:`, msg);
     return NextResponse.json(
       { error: `No se pudo conectar al router (${targetUrl}): ${msg}` },
       { status: 502 },
