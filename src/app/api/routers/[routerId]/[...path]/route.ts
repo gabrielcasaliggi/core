@@ -83,7 +83,7 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
       return NextResponse.json(
-        { error: `RouterOS ${res.status}: ${text}` },
+        { error: `RouterOS ${res.status}: ${text}`, url },
         { status: res.status },
       );
     }
@@ -93,6 +93,6 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sin respuesta";
     console.error(`[Router proxy: ${routerId}] ${url} →`, message);
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: message, url, host: cfg.host, port: cfg.port, protocol: cfg.protocol }, { status: 502 });
   }
 }
