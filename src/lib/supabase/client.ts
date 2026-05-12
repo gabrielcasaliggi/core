@@ -7,20 +7,37 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+/**
+ * Cliente browser — inicialización lazy para no fallar durante el build
+ * cuando las env vars aún no están inyectadas.
+ */
+let _browserClient: ReturnType<typeof createClient> | null = null;
 
-/** Cliente para uso en componentes del navegador. */
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+export function getSupabaseClient() {
+  if (!_browserClient) {
+    const url  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+    if (!url || !anon) throw new Error("Supabase env vars not set");
+    _browserClient = createClient(url, anon);
+  }
+  return _browserClient;
+}
+
+/** Alias para compatibilidad con código existente que importa `supabase`. */
+export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get(_target, prop) {
+    return (getSupabaseClient() as never as Record<string | symbol, unknown>)[prop];
+  },
+});
 
 /**
- * Cliente para uso en API routes (servidor).
- * Si existe SUPABASE_SERVICE_ROLE_KEY la usa (bypasea RLS).
- * Fallback: anon key (requiere políticas RLS permisivas).
+ * Cliente servidor — lee vars en runtime (no en build-time).
+ * Usa service role key si existe, si no, anon key + RLS.
  */
 export function createServerClient() {
-  const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? SUPABASE_URL;
-  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? SUPABASE_ANON;
-  const key          = process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnon;
-  return createClient(supabaseUrl, key, { auth: { persistSession: false } });
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const key  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? anon;
+  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+  return createClient(url, key, { auth: { persistSession: false } });
 }
