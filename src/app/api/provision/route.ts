@@ -95,6 +95,16 @@ function buildSteps(templateId: string): { label: string; command: string }[] {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  try {
+    return await handleProvision(request);
+  } catch (fatal) {
+    const msg = fatal instanceof Error ? fatal.message : String(fatal);
+    console.error("[provision] Error fatal no capturado:", msg);
+    return NextResponse.json({ error: `Error interno del servidor: ${msg}` }, { status: 500 });
+  }
+}
+
+async function handleProvision(request: NextRequest): Promise<NextResponse> {
   let body: ProvisionPayload;
   try {
     body = await request.json() as ProvisionPayload;
@@ -226,3 +236,4 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
