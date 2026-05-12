@@ -554,6 +554,18 @@ export default function ProvisioningView() {
       {/* ── HISTORIAL ───────────────────────────────────────────────────── */}
       {tab === "historial" && (
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {deployError && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-lg"
+              style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.3)" }}>
+              <XCircle size={15} className="flex-shrink-0 mt-0.5" style={{ color: "#F43F5E" }} />
+              <div>
+                <p className="data-value text-xs font-semibold tracking-widest mb-1" style={{ color: "#F43F5E" }}>
+                  ERROR DE PROVISIONING
+                </p>
+                <p className="text-xs" style={{ color: "rgba(248,113,133,0.9)" }}>{deployError}</p>
+              </div>
+            </div>
+          )}
           {historyLoading && (
             <div className="flex items-center justify-center h-24 gap-2">
               <Loader2 size={16} className="animate-spin" style={{ color: "#4F46E5" }} />
