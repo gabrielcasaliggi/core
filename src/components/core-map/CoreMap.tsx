@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ZoomIn, ZoomOut, Maximize2, X } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, X, Thermometer, Zap, Cpu, MemoryStick, Router } from "lucide-react";
 import { getSiteStatusColor } from "@/lib/telemetry/mock-data";
+import { useNetwork } from "@/context/NetworkContext";
 import type { Site, DataFlow } from "@/types/telemetry";
 
 interface CoreMapProps {
@@ -118,6 +119,8 @@ export default function CoreMap({ sites, flows, className }: CoreMapProps) {
   const [tf, setTf]             = useState<Transform>(DEFAULT_TRANSFORM);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+
+  const { getRealSite } = useNetwork();
 
   useEffect(() => {
     const ro = new ResizeObserver(entries => {
@@ -538,91 +541,164 @@ export default function CoreMap({ sites, flows, className }: CoreMapProps) {
       </div>
 
       {/* ── Site detail panel (HTML overlay, no zoom distortion) ─────── */}
-      {selectedSite && (
-        <div
-          className="absolute top-4 right-4 z-30 w-64 scan-in"
-          style={{
-            background: "rgba(2,0,20,0.96)",
-            border: "1px solid rgba(79,70,229,0.3)",
-            borderRadius: "6px",
-            backdropFilter: "blur(14px)",
-            boxShadow: "0 0 32px rgba(79,70,229,0.12), 0 0 16px rgba(6,182,212,0.06), inset 0 0 0 1px rgba(255,255,255,0.02)",
-          }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-indigo-500/20">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
-                style={{ background: getSiteStatusColor(selectedSite.status), boxShadow: `0 0 6px ${getSiteStatusColor(selectedSite.status)}` }} />
-              <span className="text-[11px] font-mono font-semibold tracking-wider truncate"
-                style={{ color: "#a5b4fc" }}>
-                {selectedSite.name.toUpperCase()}
+      {selectedSite && (() => {
+        const realData = getRealSite(selectedSite.id);
+        const sc = getSiteStatusColor(selectedSite.status);
+        return (
+          <div
+            className="absolute top-4 right-4 z-30 w-68 scan-in"
+            style={{
+              width: "17rem",
+              background: "rgba(2,0,20,0.96)",
+              border: "1px solid rgba(79,70,229,0.3)",
+              borderRadius: "6px",
+              backdropFilter: "blur(14px)",
+              boxShadow: "0 0 32px rgba(79,70,229,0.12), 0 0 16px rgba(6,182,212,0.06), inset 0 0 0 1px rgba(255,255,255,0.02)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-indigo-500/20">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                  style={{ background: sc, boxShadow: `0 0 6px ${sc}` }} />
+                <span className="text-[11px] font-mono font-semibold tracking-wider truncate"
+                  style={{ color: "#a5b4fc" }}>
+                  {selectedSite.name.toUpperCase()}
+                </span>
+                {realData && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+                    style={{ background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.2)" }}>
+                    LIVE
+                  </span>
+                )}
+              </div>
+              <button onClick={resetView}
+                className="text-slate-600 hover:text-slate-200 transition-colors ml-2 flex-shrink-0">
+                <X size={13} />
+              </button>
+            </div>
+
+            {/* Resilience Score */}
+            <div className="px-3 py-2 border-b border-slate-800/50 flex items-center justify-between">
+              <span className="text-[9px] font-mono text-slate-500 tracking-widest">RESILIENCE SCORE</span>
+              <span className="text-base font-mono font-bold"
+                style={{ color: sc, textShadow: `0 0 10px ${sc}88` }}>
+                {selectedSite.resilienceScore}%
               </span>
             </div>
-            <button onClick={resetView}
-              className="text-slate-600 hover:text-slate-200 transition-colors ml-2 flex-shrink-0">
-              <X size={13} />
-            </button>
-          </div>
 
-          {/* Resilience Score */}
-          <div className="px-3 py-2 border-b border-slate-800/50 flex items-center justify-between">
-            <span className="text-[9px] font-mono text-slate-500 tracking-widest">RESILIENCE SCORE</span>
-            <span className="text-base font-mono font-bold"
-              style={{ color: getSiteStatusColor(selectedSite.status), textShadow: `0 0 10px ${getSiteStatusColor(selectedSite.status)}88` }}>
-              {selectedSite.resilienceScore}%
-            </span>
-          </div>
-
-          {/* Links */}
-          <div className="px-3 py-2 space-y-1.5 border-b border-slate-800/70">
-            <span className="text-[9px] font-mono text-slate-500 tracking-widest block mb-1.5">ENLACES DE RED</span>
-            {selectedSite.links.map(l => {
-              const lc = l.status === "active" ? "#10b981" : l.status === "standby" ? "#f59e0b" : "#ef4444";
-              return (
-                <div key={l.id} className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: lc }} />
-                  <span className="text-[10px] font-mono text-slate-300 flex-1 truncate">
-                    {l.type.toUpperCase()} · {l.provider}
-                  </span>
-                  <span className="text-[9px] font-mono flex-shrink-0" style={{ color: lc }}>
-                    {l.status === "active" ? `${l.latencyMs}ms` : l.status.toUpperCase()}
-                  </span>
+            {/* Hardware metrics — solo para routers reales */}
+            {realData && (
+              <div className="px-3 py-2 border-b border-slate-800/50 space-y-1.5">
+                <span className="text-[9px] font-mono text-slate-500 tracking-widest block">HARDWARE · {realData.boardName}</span>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {/* CPU */}
+                  <div className="flex items-center gap-1.5">
+                    <Cpu size={9} className="text-indigo-400 flex-shrink-0" />
+                    <span className="text-[9px] font-mono text-slate-400">CPU</span>
+                    <span className="text-[10px] font-mono ml-auto"
+                      style={{ color: realData.cpuLoad > 80 ? "#ef4444" : realData.cpuLoad > 50 ? "#f59e0b" : "#10b981" }}>
+                      {realData.cpuLoad}%
+                    </span>
+                  </div>
+                  {/* RAM */}
+                  <div className="flex items-center gap-1.5">
+                    <MemoryStick size={9} className="text-indigo-400 flex-shrink-0" />
+                    <span className="text-[9px] font-mono text-slate-400">RAM</span>
+                    <span className="text-[10px] font-mono ml-auto"
+                      style={{ color: realData.ramUsedPct > 85 ? "#ef4444" : realData.ramUsedPct > 65 ? "#f59e0b" : "#10b981" }}>
+                      {realData.ramUsedPct}%
+                    </span>
+                  </div>
+                  {/* Temperatura CPU */}
+                  {realData.cpuTempC !== null && (
+                    <div className="flex items-center gap-1.5">
+                      <Thermometer size={9} className="text-indigo-400 flex-shrink-0" />
+                      <span className="text-[9px] font-mono text-slate-400">TEMP</span>
+                      <span className="text-[10px] font-mono ml-auto"
+                        style={{ color: realData.cpuTempC > 70 ? "#ef4444" : realData.cpuTempC > 55 ? "#f59e0b" : "#10b981" }}>
+                        {realData.cpuTempC}°C
+                      </span>
+                    </div>
+                  )}
+                  {/* Voltaje */}
+                  {realData.voltageV !== null && (
+                    <div className="flex items-center gap-1.5">
+                      <Zap size={9} className="text-indigo-400 flex-shrink-0" />
+                      <span className="text-[9px] font-mono text-slate-400">VOLT</span>
+                      <span className="text-[10px] font-mono ml-auto"
+                        style={{ color: realData.voltageV < 10.5 ? "#ef4444" : "#10b981" }}>
+                        {realData.voltageV.toFixed(1)}V
+                      </span>
+                    </div>
+                  )}
+                  {/* RouterOS version */}
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <Router size={9} className="text-indigo-400 flex-shrink-0" />
+                    <span className="text-[9px] font-mono text-slate-400">RouterOS</span>
+                    <span className="text-[9px] font-mono ml-auto text-slate-300">{realData.rosVersion}</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+                {/* WAN gateway activo */}
+                {realData.activeWanGateway && (
+                  <div className="flex items-center justify-between pt-0.5">
+                    <span className="text-[9px] font-mono text-slate-500">GW ACTIVO</span>
+                    <span className="text-[9px] font-mono text-emerald-400">{realData.activeWanGateway}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* VPN Tunnels */}
-          {selectedSite.vpnTunnels.length > 0 && (
-            <div className="px-3 py-2 space-y-1 border-b border-slate-800/70">
-              <span className="text-[9px] font-mono text-slate-500 tracking-widest block mb-1.5">TÚNELES VPN</span>
-              {selectedSite.vpnTunnels.map(t => (
-                <div key={t.id} className="flex items-center justify-between">
-                  <span className="text-[9px] font-mono text-slate-400 truncate flex-1 mr-2">{t.targetSiteId}</span>
-                  <span className={`text-[9px] font-mono flex-shrink-0 ${t.status === "active" ? "text-emerald-400" : "text-red-400"}`}>
-                    {t.status.toUpperCase()} · {t.protocol}
-                  </span>
+            {/* Links */}
+            <div className="px-3 py-2 space-y-1.5 border-b border-slate-800/70">
+              <span className="text-[9px] font-mono text-slate-500 tracking-widest block mb-1.5">ENLACES DE RED</span>
+              {selectedSite.links.map(l => {
+                const lc = l.status === "active" ? "#10b981" : l.status === "standby" ? "#f59e0b" : "#ef4444";
+                return (
+                  <div key={l.id} className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: lc }} />
+                    <span className="text-[10px] font-mono text-slate-300 flex-1 truncate">
+                      {l.type.toUpperCase()} · {l.provider}
+                    </span>
+                    <span className="text-[9px] font-mono flex-shrink-0" style={{ color: lc }}>
+                      {l.status === "active" ? `${l.latencyMs}ms` : l.status.toUpperCase()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* VPN Tunnels */}
+            {selectedSite.vpnTunnels.length > 0 && (
+              <div className="px-3 py-2 space-y-1 border-b border-slate-800/70">
+                <span className="text-[9px] font-mono text-slate-500 tracking-widest block mb-1.5">TÚNELES VPN</span>
+                {selectedSite.vpnTunnels.map(t => (
+                  <div key={t.id} className="flex items-center justify-between">
+                    <span className="text-[9px] font-mono text-slate-400 truncate flex-1 mr-2">{t.targetSiteId}</span>
+                    <span className={`text-[9px] font-mono flex-shrink-0 ${t.status === "active" ? "text-emerald-400" : "text-red-400"}`}>
+                      {t.status.toUpperCase()} · {t.protocol}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer stats */}
+            <div className="px-3 py-2.5 grid grid-cols-3 gap-2">
+              {[
+                { label: "USUARIOS",     value: String(selectedSite.activeUsers) },
+                { label: "DISPOSITIVOS", value: String(selectedSite.connectedDevices) },
+                { label: "FIREWALL",     value: selectedSite.firewallEnabled ? "ON" : "OFF" },
+              ].map(item => (
+                <div key={item.label} className="text-center">
+                  <div className="text-[12px] font-mono font-semibold text-cyan-300">{item.value}</div>
+                  <div className="text-[7.5px] font-mono text-slate-500 tracking-widest leading-tight">{item.label}</div>
                 </div>
               ))}
             </div>
-          )}
-
-          {/* Footer stats */}
-          <div className="px-3 py-2.5 grid grid-cols-3 gap-2">
-            {[
-              { label: "USUARIOS", value: String(selectedSite.activeUsers) },
-              { label: "DISPOSITIVOS", value: String(selectedSite.connectedDevices) },
-              { label: "FIREWALL", value: selectedSite.firewallEnabled ? "ON" : "OFF" },
-            ].map(item => (
-              <div key={item.label} className="text-center">
-                <div className="text-[12px] font-mono font-semibold text-cyan-300">{item.value}</div>
-                <div className="text-[7.5px] font-mono text-slate-500 tracking-widest leading-tight">{item.label}</div>
-              </div>
-            ))}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

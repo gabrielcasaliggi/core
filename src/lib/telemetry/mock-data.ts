@@ -4,7 +4,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
   timestamp: new Date().toISOString(),
   globalResilienceScore: 87,
   sites: [
-    // ── Casa Central (Batán, BA Province) ──────────────────────────────
+    // ── Casa Central (Batán) ──────────────────────────────────────────
     {
       id: "site-hq",
       name: "Casa Central",
@@ -56,13 +56,13 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       ],
     },
 
-    // ── Obrador (Mar del Plata) ────────────────────────────────────────
+    // ── Obrador (Tandil) ──────────────────────────────────────────────
     {
       id: "site-obrador",
       name: "Obrador",
       shortName: "OBR",
       type: "remote",
-      coords: { lat: -38.00, lng: -57.55 },
+      coords: { lat: -37.3198, lng: -59.1342 },
       status: "degraded",
       resilienceScore: 71,
       connectedDevices: 34,
@@ -96,13 +96,13 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       ],
     },
 
-    // ── Estudio Jurídico (Buenos Aires) ────────────────────────────────
+    // ── Estudio Jurídico (Necochea) ───────────────────────────────────
     {
       id: "site-studio",
       name: "Estudio Jurídico",
       shortName: "EST",
       type: "studio",
-      coords: { lat: -34.62, lng: -58.40 },
+      coords: { lat: -38.5548, lng: -58.7396 },
       status: "operational",
       resilienceScore: 94,
       connectedDevices: 28,
@@ -136,13 +136,13 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       ],
     },
 
-    // ── Sucursal (La Plata) ───────────────────────────────────────────
+    // ── Sucursal (Balcarce) ───────────────────────────────────────────
     {
       id: "site-sucursal",
       name: "Sucursal",
       shortName: "SUC",
       type: "branch",
-      coords: { lat: -34.90, lng: -57.95 },
+      coords: { lat: -37.8462, lng: -58.2549 },
       status: "operational",
       resilienceScore: 88,
       connectedDevices: 45,
@@ -185,6 +185,8 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
     { id: "flow-studio-sucursal-fiber",sourceId: "site-studio",   targetId: "site-sucursal", throughputMbps: 28.7,  protocol: "VPN", connectionType: "fiber",     encrypted: true,  congested: false },
     { id: "flow-hq-obrador-radio",     sourceId: "site-hq",       targetId: "site-obrador",  throughputMbps: 0,     protocol: "VPN", connectionType: "radiolink", encrypted: true,  congested: false },
     { id: "flow-obrador-sucursal-star",sourceId: "site-obrador",  targetId: "site-sucursal", throughputMbps: 18.3,  protocol: "VPN", connectionType: "starlink",  encrypted: true,  congested: false },
+    // Oficina real (site-office) — el throughput se actualiza con datos reales
+    { id: "flow-office-hq-fiber",      sourceId: "site-office",   targetId: "site-hq",       throughputMbps: 12.0,  protocol: "VPN", connectionType: "fiber",     encrypted: true,  congested: false },
   ],
 
   activeAlerts: [

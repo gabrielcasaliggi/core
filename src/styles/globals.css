@@ -251,24 +251,24 @@ body::after {
 /* ── HUD Input — campos de formulario técnico ──────────────────────────────── */
 .hud-input {
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  background: rgba(0, 6, 20, 0.7);
-  border: 1px solid rgba(79, 70, 229, 0.2);
-  border-radius: 4px;
-  padding: 6px 10px;
-  color: rgba(226, 232, 240, 0.85);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  background: rgba(0, 8, 24, 0.75);
+  border: 1px solid rgba(79, 70, 229, 0.28);
+  border-radius: 5px;
+  padding: 8px 12px;
+  color: rgba(226, 232, 240, 0.95);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .hud-input:focus {
-  border-color: rgba(79, 70, 229, 0.55);
-  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.65);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
 }
 .hud-input::placeholder {
-  color: rgba(71, 85, 105, 0.45);
+  color: rgba(100, 116, 139, 0.55);
 }
 .hud-input option {
-  background: #000814;
-  color: rgba(226, 232, 240, 0.85);
+  background: #000c1e;
+  color: rgba(226, 232, 240, 0.95);
 }

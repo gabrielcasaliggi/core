@@ -3,22 +3,17 @@
 /**
  * ProvisioningView — Alta de Nuevos Sitios y Equipos
  *
- * Flujo operativo:
- *   1. Operador selecciona o crea un nuevo sitio
- *   2. Elige plantilla maestra RouterOS según tipo de conectividad
- *   3. Completa datos del equipo (modelo, IP, coordenadas)
- *   4. Sistema ejecuta deploy secuencial simulando comandos RouterOS
+ * Flujo real (con Supabase):
+ *   1. Operador completa datos del sitio + credenciales del router
+ *   2. Elige plantilla maestra RouterOS
+ *   3. Sistema valida conexión al router via API
+ *   4. Guarda router en Supabase + ejecuta provisioning
  *   5. El nuevo sitio queda disponible en el CORE-Map automáticamente
- *
- * TODO: conectar a POST /api/mikrotik/provision
  */
 
-import { useState, useRef }       from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNetwork }             from "@/context/NetworkContext";
-import {
-  PROVISIONING_TEMPLATES,
-  MOCK_PROVISIONING_HISTORY,
-}                                 from "@/lib/telemetry/mock-data";
+import { PROVISIONING_TEMPLATES } from "@/lib/telemetry/mock-data";
 import type {
   ProvisioningTemplate,
   ProvisioningJob,
@@ -26,6 +21,7 @@ import type {
   NewSiteFormData,
   HardwareModel,
 } from "@/types/telemetry";
+import type { ProvisioningJobRow } from "@/lib/supabase/types";
 import {
   Zap, Plus, CheckCircle2, XCircle, Clock, Loader2,
   ChevronRight, ChevronDown, Terminal, MapPin, Cpu,
@@ -63,7 +59,23 @@ const LINK_TYPE_COLOR: Record<string, string> = {
 
 type Tab = "nuevo" | "historial";
 
-// ── Deploy simulation ──────────────────────────────────────────────────────────
+// ── Conversión Supabase row → tipo local ───────────────────────────────────────
+
+function rowToJob(row: ProvisioningJobRow): ProvisioningJob {
+  return {
+    id:          row.id,
+    siteId:      (row.metadata as { site_id?: string } | null)?.site_id ?? "—",
+    siteName:    row.site_name,
+    templateId:  row.template_id,
+    hardware:    row.hardware as HardwareModel,
+    status:      row.status,
+    startedAt:   row.started_at,
+    completedAt: row.completed_at ?? undefined,
+    steps:       (row.steps as ProvisioningStep[]) ?? [],
+  };
+}
+
+// ── Deploy simulation (pasos base — Fase 2 reemplaza con ejecución real) ───────
 
 function buildSteps(templateId: string, siteName: string): ProvisioningStep[] {
   const base: ProvisioningStep[] = [
@@ -109,16 +121,31 @@ function buildSteps(templateId: string, siteName: string): ProvisioningStep[] {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
+// ── Formulario extendido con credenciales del router ─────────────────────────
+
+interface RouterFormData extends NewSiteFormData {
+  routerHost:     string;
+  routerPort:     number;
+  routerProtocol: "http" | "https";
+  routerUser:     string;
+  routerPass:     string;
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
+
 export default function ProvisioningView() {
   const { snapshot }              = useNetwork();
   const [tab, setTab]             = useState<Tab>("nuevo");
   const [selectedTpl, setTpl]     = useState<ProvisioningTemplate | null>(null);
-  const [jobs, setJobs]           = useState<ProvisioningJob[]>(MOCK_PROVISIONING_HISTORY);
+  const [jobs, setJobs]           = useState<ProvisioningJob[]>([]);
   const [activeJob, setActiveJob] = useState<ProvisioningJob | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const runningRef = useRef(false);
 
-  const [form, setForm] = useState<NewSiteFormData>({
+  const [form, setForm] = useState<RouterFormData>({
     name: "", shortName: "", type: "branch",
     coords: { lat: -34.6, lng: -58.4 },
     templateId: "",
@@ -127,66 +154,109 @@ export default function ProvisioningView() {
     wanType: "fiber",
     bandwidthMbps: 100,
     publicIP: "",
+    routerHost:     "",
+    routerPort:     80,
+    routerProtocol: "http",
+    routerUser:     "admin",
+    routerPass:     "",
   });
 
-  const provisionedSites = snapshot.sites.map(s => s.id);
-  const isFormValid = form.name.trim() && form.shortName.trim() && form.templateId && form.provider.trim();
+  // ── Cargar historial desde Supabase al montar ─────────────────────────────
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/provision/history");
+        if (!res.ok) throw new Error("Error cargando historial");
+        const rows: ProvisioningJobRow[] = await res.json();
+        setJobs(rows.map(rowToJob));
+      } catch (e) {
+        console.warn("[ProvisioningView] historial:", e);
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    loadHistory();
+  }, []);
 
-  const handleDeploy = () => {
+  const isFormValid =
+    form.name.trim() &&
+    form.shortName.trim() &&
+    form.templateId &&
+    form.provider.trim() &&
+    form.routerHost.trim() &&
+    form.routerUser.trim() &&
+    form.routerPass.trim();
+
+  // ── Deploy real via API ───────────────────────────────────────────────────
+  const handleDeploy = async () => {
     if (!isFormValid || !selectedTpl || runningRef.current) return;
     runningRef.current = true;
+    setDeploying(true);
+    setDeployError(null);
 
-    const steps = buildSteps(form.templateId, form.name);
-    const job: ProvisioningJob = {
-      id:          `job-${Date.now()}`,
-      siteId:      `site-${form.shortName.toLowerCase()}`,
-      siteName:    form.name,
-      templateId:  form.templateId,
-      hardware:    form.hardware,
-      status:      "running",
-      startedAt:   new Date().toISOString(),
-      steps,
+    // Job "running" local para feedback inmediato
+    const localJob: ProvisioningJob = {
+      id:        `local-${Date.now()}`,
+      siteId:    `site-${form.shortName.toLowerCase()}`,
+      siteName:  form.name,
+      templateId: form.templateId,
+      hardware:  form.hardware,
+      status:    "running",
+      startedAt: new Date().toISOString(),
+      steps:     buildSteps(form.templateId, form.name).map(s => ({ ...s, status: "pending" as const })),
     };
 
-    setActiveJob({ ...job });
-    setJobs(prev => [job, ...prev]);
+    setActiveJob(localJob);
+    setJobs(prev => [localJob, ...prev]);
     setTab("historial");
-    setExpandedJob(job.id);
+    setExpandedJob(localJob.id);
 
-    // Simula ejecución paso a paso
-    let i = 0;
-    const tick = () => {
-      if (i >= steps.length) {
-        const completed: ProvisioningJob = {
-          ...job,
-          status:      "success",
-          completedAt: new Date().toISOString(),
-          steps: steps.map(s => ({ ...s, status: "success" as const,
-            log: s.command.startsWith("/tool ping") ? "3 packets OK, avg 9ms" : "done" })),
-        };
-        setActiveJob(completed);
-        setJobs(prev => prev.map(j => j.id === job.id ? completed : j));
-        runningRef.current = false;
-        return;
+    try {
+      const res = await fetch("/api/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId:       `site-${form.shortName.toLowerCase()}`,
+          siteName:     form.name,
+          shortName:    form.shortName,
+          siteType:     form.type,
+          lat:          form.coords.lat,
+          lng:          form.coords.lng,
+          provider:     form.provider,
+          wanType:      form.wanType,
+          bandwidthMbps: form.bandwidthMbps,
+          host:         form.routerHost,
+          port:         form.routerPort,
+          protocol:     form.routerProtocol,
+          username:     form.routerUser,
+          password:     form.routerPass,
+          tlsRejectUnauthorized: false,
+          templateId:   form.templateId,
+          hardware:     form.hardware,
+        }),
+      });
+
+      const data = await res.json() as { success?: boolean; error?: string; job?: ProvisioningJobRow };
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error ?? "Error en provisioning");
       }
 
-      const updatedSteps = steps.map((s, idx) => ({
-        ...s,
-        status: idx < i ? "success" as const
-               : idx === i ? "running" as const
-               : "pending" as const,
-        log: idx < i ? "done" : undefined,
-      }));
-
-      const running: ProvisioningJob = { ...job, status: "running", steps: updatedSteps };
-      setActiveJob(running);
-      setJobs(prev => prev.map(j => j.id === job.id ? running : j));
-
-      i++;
-      setTimeout(tick, 600 + Math.random() * 500);
-    };
-
-    setTimeout(tick, 400);
+      // Reemplazar job local con el real de Supabase
+      const realJob = data.job ? rowToJob(data.job) : { ...localJob, status: "success" as const, completedAt: new Date().toISOString() };
+      setJobs(prev => prev.map(j => j.id === localJob.id ? realJob : j));
+      setActiveJob(realJob);
+      setExpandedJob(realJob.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error desconocido";
+      setDeployError(message);
+      const failed = { ...localJob, status: "error" as const, completedAt: new Date().toISOString() };
+      setJobs(prev => prev.map(j => j.id === localJob.id ? failed : j));
+      setActiveJob(failed);
+    } finally {
+      setDeploying(false);
+      runningRef.current = false;
+    }
   };
 
   return (
@@ -194,13 +264,13 @@ export default function ProvisioningView() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b scan-in"
-        style={{ borderColor: "rgba(79,70,229,0.15)", background: "rgba(0,4,14,0.88)" }}>
+        style={{ borderColor: "rgba(79,70,229,0.2)", background: "rgba(0,4,14,0.92)" }}>
         <div className="flex items-center gap-3">
-          <Zap size={14} style={{ color: "#4F46E5" }} />
-          <span className="data-value text-sm font-semibold tracking-widest" style={{ color: "#818cf8" }}>
+          <Zap size={16} style={{ color: "#4F46E5" }} />
+          <span className="data-value text-base font-semibold tracking-widest" style={{ color: "#a5b4fc" }}>
             PROVISIONING VELOZ
           </span>
-          <span className="data-value text-[9px] tracking-widest" style={{ color: "rgba(71,85,105,0.6)" }}>
+          <span className="data-value text-xs tracking-wider" style={{ color: "rgba(148,163,184,0.6)" }}>
             · Alta de Equipos · Plantillas Maestras RouterOS
           </span>
         </div>
@@ -212,14 +282,14 @@ export default function ProvisioningView() {
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex border-b" style={{ borderColor: "rgba(79,70,229,0.12)" }}>
+      <div className="flex-shrink-0 flex border-b" style={{ borderColor: "rgba(79,70,229,0.15)" }}>
         {(["nuevo", "historial"] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className="data-value text-[10px] tracking-widest uppercase px-6 py-2.5 transition-colors"
+            className="data-value text-xs tracking-widest uppercase px-6 py-3 transition-colors"
             style={{
-              color:        tab === t ? "#818cf8" : "rgba(100,116,139,0.6)",
-              borderBottom: tab === t ? "1px solid #4F46E5" : "1px solid transparent",
-              background:   tab === t ? "rgba(79,70,229,0.05)" : "transparent",
+              color:        tab === t ? "#a5b4fc" : "rgba(148,163,184,0.7)",
+              borderBottom: tab === t ? "2px solid #4F46E5" : "2px solid transparent",
+              background:   tab === t ? "rgba(79,70,229,0.07)" : "transparent",
             }}>
             {t === "nuevo" ? "➕ Nuevo Sitio / Equipo" : `📋 Historial (${jobs.length})`}
           </button>
@@ -231,11 +301,11 @@ export default function ProvisioningView() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left: form */}
-          <div className="w-[440px] flex-shrink-0 flex flex-col border-r overflow-y-auto"
-            style={{ borderColor: "rgba(79,70,229,0.12)" }}>
+          <div className="w-[460px] flex-shrink-0 flex flex-col border-r overflow-y-auto"
+            style={{ borderColor: "rgba(79,70,229,0.15)" }}>
 
-            <div className="p-5 space-y-4">
-              <SectionLabel icon={<MapPin size={10}/>} label="Datos del Sitio" />
+            <div className="p-5 space-y-5">
+              <SectionLabel icon={<MapPin size={12}/>} label="Datos del Sitio" />
 
               {/* Name */}
               <div className="grid grid-cols-2 gap-3">
@@ -253,14 +323,14 @@ export default function ProvisioningView() {
 
               {/* Type */}
               <Field label="TIPO DE SITIO">
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-4 gap-2">
                   {SITE_TYPES.map(st => (
                     <button key={st.value} onClick={() => setForm(p => ({...p, type: st.value}))}
-                      className="data-value text-[9px] py-1.5 rounded text-center transition-all"
+                      className="data-value text-xs py-2 rounded text-center transition-all"
                       style={{
-                        border:  `1px solid ${form.type === st.value ? "rgba(79,70,229,0.5)" : "rgba(255,255,255,0.07)"}`,
-                        background: form.type === st.value ? "rgba(79,70,229,0.12)" : "transparent",
-                        color: form.type === st.value ? "#818cf8" : "rgba(100,116,139,0.7)",
+                        border:     `1px solid ${form.type === st.value ? "rgba(79,70,229,0.6)" : "rgba(255,255,255,0.1)"}`,
+                        background: form.type === st.value ? "rgba(79,70,229,0.18)" : "rgba(255,255,255,0.03)",
+                        color:      form.type === st.value ? "#a5b4fc" : "rgba(148,163,184,0.8)",
                       }}>
                       {st.label}
                     </button>
@@ -282,24 +352,24 @@ export default function ProvisioningView() {
                 </Field>
               </div>
 
-              <SectionLabel icon={<Wifi size={10}/>} label="Conectividad WAN" />
+              <SectionLabel icon={<Wifi size={12}/>} label="Conectividad WAN" />
 
               {/* WAN type */}
               <Field label="TIPO DE ENLACE">
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
                   {WAN_TYPES.map(wt => {
                     const Icon = wt.icon;
                     const active = form.wanType === wt.value;
                     const c = LINK_TYPE_COLOR[wt.value];
                     return (
                       <button key={wt.value} onClick={() => setForm(p => ({...p, wanType: wt.value as typeof p.wanType}))}
-                        className="flex items-center justify-center gap-1.5 data-value text-[9px] py-2 rounded transition-all"
+                        className="flex items-center justify-center gap-2 data-value text-xs py-2.5 rounded transition-all"
                         style={{
-                          border:     `1px solid ${active ? c + "60" : "rgba(255,255,255,0.07)"}`,
-                          background: active ? `${c}12` : "transparent",
-                          color:      active ? c : "rgba(100,116,139,0.7)",
+                          border:     `1px solid ${active ? c + "70" : "rgba(255,255,255,0.1)"}`,
+                          background: active ? `${c}18` : "rgba(255,255,255,0.03)",
+                          color:      active ? c : "rgba(148,163,184,0.8)",
                         }}>
-                        <Icon size={10}/>{wt.label}
+                        <Icon size={12}/>{wt.label}
                       </button>
                     );
                   })}
@@ -325,7 +395,7 @@ export default function ProvisioningView() {
                   className="hud-input w-full" />
               </Field>
 
-              <SectionLabel icon={<Cpu size={10}/>} label="Equipo" />
+              <SectionLabel icon={<Cpu size={12}/>} label="Equipo" />
 
               <Field label="MODELO MIKROTIK">
                 <select value={form.hardware}
@@ -334,6 +404,45 @@ export default function ProvisioningView() {
                   {HARDWARE_OPTIONS.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </Field>
+
+              <SectionLabel icon={<Server size={12}/>} label="Acceso RouterOS API" />
+
+              <Field label="HOST / DDNS DEL ROUTER">
+                <input value={form.routerHost}
+                  onChange={e => setForm(p => ({...p, routerHost: e.target.value}))}
+                  placeholder="192.168.1.1 o xxxxxx.sn.mynetname.net"
+                  className="hud-input w-full" />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="PROTOCOLO">
+                  <select value={form.routerProtocol}
+                    onChange={e => setForm(p => ({...p, routerProtocol: e.target.value as "http" | "https"}))}
+                    className="hud-input w-full">
+                    <option value="http">HTTP (puerto 80)</option>
+                    <option value="https">HTTPS (puerto 443)</option>
+                  </select>
+                </Field>
+                <Field label="PUERTO">
+                  <input type="number" value={form.routerPort}
+                    onChange={e => setForm(p => ({...p, routerPort: parseInt(e.target.value) || 80}))}
+                    className="hud-input w-full" />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="USUARIO ROUTEROS">
+                  <input value={form.routerUser}
+                    onChange={e => setForm(p => ({...p, routerUser: e.target.value}))}
+                    placeholder="admin"
+                    className="hud-input w-full" />
+                </Field>
+                <Field label="CONTRASEÑA">
+                  <input type="password" value={form.routerPass}
+                    onChange={e => setForm(p => ({...p, routerPass: e.target.value}))}
+                    className="hud-input w-full" />
+                </Field>
+              </div>
             </div>
           </div>
 
@@ -342,8 +451,8 @@ export default function ProvisioningView() {
 
             {/* Templates */}
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              <SectionLabel icon={<Server size={10}/>} label="Plantilla Maestra RouterOS" />
-              <p className="data-value text-[9px]" style={{ color: "rgba(71,85,105,0.6)" }}>
+              <SectionLabel icon={<Server size={12}/>} label="Plantilla Maestra RouterOS" />
+              <p className="text-sm" style={{ color: "rgba(148,163,184,0.75)" }}>
                 Seleccioná la plantilla que se aplicará al equipo via RouterOS API al hacer deploy.
               </p>
 
@@ -355,46 +464,46 @@ export default function ProvisioningView() {
                     onClick={() => { setTpl(tpl); setForm(p => ({...p, templateId: tpl.id})); }}
                     className="w-full text-left p-4 rounded-lg transition-all"
                     style={{
-                      border:     `1px solid ${isSelected ? "rgba(79,70,229,0.45)" : "rgba(79,70,229,0.12)"}`,
-                      background: isSelected ? "rgba(79,70,229,0.08)" : "rgba(0,6,20,0.5)",
-                      boxShadow:  isSelected ? "0 0 16px rgba(79,70,229,0.08)" : "none",
+                      border:     `1px solid ${isSelected ? "rgba(79,70,229,0.55)" : "rgba(79,70,229,0.18)"}`,
+                      background: isSelected ? "rgba(79,70,229,0.1)" : "rgba(0,6,20,0.55)",
+                      boxShadow:  isSelected ? "0 0 20px rgba(79,70,229,0.1)" : "none",
                     }}>
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2">
-                        {isSelected && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                          style={{ background: "#4F46E5", boxShadow: "0 0 5px #4F46E5" }} />}
-                        <span className="data-value text-[11px] font-semibold"
-                          style={{ color: isSelected ? "#818cf8" : "rgba(226,232,240,0.85)" }}>
+                        {isSelected && <span className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ background: "#4F46E5", boxShadow: "0 0 6px #4F46E5" }} />}
+                        <span className="data-value text-sm font-semibold"
+                          style={{ color: isSelected ? "#a5b4fc" : "rgba(226,232,240,0.9)" }}>
                           {tpl.name}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <Clock size={9} style={{ color: "rgba(71,85,105,0.6)" }} />
-                        <span className="data-value text-[8.5px]" style={{ color: "rgba(71,85,105,0.6)" }}>
+                        <Clock size={11} style={{ color: "rgba(148,163,184,0.6)" }} />
+                        <span className="data-value text-xs" style={{ color: "rgba(148,163,184,0.6)" }}>
                           ~{tpl.estimatedSeconds}s
                         </span>
                       </div>
                     </div>
 
-                    <p className="data-value text-[9.5px] mb-3" style={{ color: "rgba(100,116,139,0.7)" }}>
+                    <p className="text-xs mb-3" style={{ color: "rgba(148,163,184,0.75)" }}>
                       {tpl.description}
                     </p>
 
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {tpl.features.map(f => (
-                        <span key={f} className="data-value text-[8px] px-1.5 py-0.5 rounded"
-                          style={{ color: "rgba(129,140,248,0.8)", background: "rgba(79,70,229,0.1)", border: "1px solid rgba(79,70,229,0.2)" }}>
+                        <span key={f} className="data-value text-[11px] px-2 py-0.5 rounded"
+                          style={{ color: "#a5b4fc", background: "rgba(79,70,229,0.12)", border: "1px solid rgba(79,70,229,0.25)" }}>
                           {f}
                         </span>
                       ))}
                     </div>
 
                     <div className="flex gap-3">
-                      <span className="data-value text-[8px] px-1.5 py-0.5 rounded"
-                        style={{ color: lc, background: `${lc}12`, border: `1px solid ${lc}25` }}>
+                      <span className="data-value text-[11px] px-2 py-0.5 rounded"
+                        style={{ color: lc, background: `${lc}14`, border: `1px solid ${lc}30` }}>
                         WAN: {tpl.wanType.toUpperCase()}
                       </span>
-                      <span className="data-value text-[8px]" style={{ color: "rgba(71,85,105,0.55)" }}>
+                      <span className="data-value text-xs" style={{ color: "rgba(148,163,184,0.6)" }}>
                         HW: {tpl.hardware.join(", ")}
                       </span>
                     </div>
@@ -404,29 +513,37 @@ export default function ProvisioningView() {
             </div>
 
             {/* Deploy button */}
-            <div className="flex-shrink-0 p-5 border-t" style={{ borderColor: "rgba(79,70,229,0.12)" }}>
+            <div className="flex-shrink-0 p-5 border-t" style={{ borderColor: "rgba(79,70,229,0.15)" }}>
               {!isFormValid && (
-                <p className="data-value text-[9px] mb-3 text-center" style={{ color: "rgba(71,85,105,0.6)" }}>
-                  Completá nombre, código, proveedor y seleccioná una plantilla para habilitar el deploy.
+                <p className="text-xs mb-3 text-center" style={{ color: "rgba(148,163,184,0.65)" }}>
+                  Completá todos los campos incluyendo el host y credenciales del router.
+                </p>
+              )}
+              {deployError && (
+                <p className="text-xs mb-3 text-center px-3 py-2 rounded"
+                  style={{ color: "#fb7185", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.25)" }}>
+                  ✗ {deployError}
                 </p>
               )}
               <button
                 onClick={handleDeploy}
-                disabled={!isFormValid}
-                className="w-full py-3 rounded-lg data-value text-[11px] font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all"
+                disabled={!isFormValid || deploying}
+                className="w-full py-3.5 rounded-lg data-value text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all"
                 style={{
-                  background:  isFormValid ? "rgba(79,70,229,0.15)" : "rgba(255,255,255,0.03)",
-                  border:      `1px solid ${isFormValid ? "rgba(79,70,229,0.5)" : "rgba(255,255,255,0.06)"}`,
-                  color:       isFormValid ? "#818cf8" : "rgba(71,85,105,0.4)",
-                  cursor:      isFormValid ? "pointer" : "not-allowed",
-                  boxShadow:   isFormValid ? "0 0 20px rgba(79,70,229,0.1)" : "none",
+                  background:  isFormValid && !deploying ? "rgba(79,70,229,0.18)" : "rgba(255,255,255,0.03)",
+                  border:      `1px solid ${isFormValid && !deploying ? "rgba(79,70,229,0.6)" : "rgba(255,255,255,0.08)"}`,
+                  color:       isFormValid && !deploying ? "#a5b4fc" : "rgba(100,116,139,0.5)",
+                  cursor:      isFormValid && !deploying ? "pointer" : "not-allowed",
+                  boxShadow:   isFormValid && !deploying ? "0 0 24px rgba(79,70,229,0.15)" : "none",
                 }}>
-                <Zap size={13} />
-                Iniciar Provisioning
+                {deploying
+                  ? <><Loader2 size={15} className="animate-spin" /> Conectando con RouterOS…</>
+                  : <><Zap size={15} /> Iniciar Provisioning</>
+                }
               </button>
-              {selectedTpl && (
-                <p className="data-value text-[8px] mt-2 text-center" style={{ color: "rgba(71,85,105,0.5)" }}>
-                  Tiempo estimado: ~{selectedTpl.estimatedSeconds}s · TODO: POST /api/mikrotik/provision
+              {selectedTpl && !deploying && (
+                <p className="text-xs mt-2 text-center" style={{ color: "rgba(148,163,184,0.5)" }}>
+                  Validará conexión al router · Guardará en Supabase · ~{selectedTpl.estimatedSeconds}s
                 </p>
               )}
             </div>
@@ -437,11 +554,19 @@ export default function ProvisioningView() {
       {/* ── HISTORIAL ───────────────────────────────────────────────────── */}
       {tab === "historial" && (
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
-          {jobs.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <Zap size={24} style={{ color: "#4F46E5", opacity: 0.3 }} />
-              <span className="data-value text-[10px]" style={{ color: "rgba(71,85,105,0.6)" }}>
-                No hay provisionings realizados
+          {historyLoading && (
+            <div className="flex items-center justify-center h-24 gap-2">
+              <Loader2 size={16} className="animate-spin" style={{ color: "#4F46E5" }} />
+              <span className="text-sm" style={{ color: "rgba(148,163,184,0.7)" }}>
+                Cargando historial desde Supabase…
+              </span>
+            </div>
+          )}
+          {!historyLoading && jobs.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-40 gap-3">
+              <Zap size={28} style={{ color: "#4F46E5", opacity: 0.3 }} />
+              <span className="text-sm" style={{ color: "rgba(148,163,184,0.6)" }}>
+                No hay provisionings en Supabase todavía
               </span>
             </div>
           )}
@@ -458,75 +583,75 @@ export default function ProvisioningView() {
 
             return (
               <div key={job.id} className="rounded-lg overflow-hidden"
-                style={{ border: `1px solid ${sc}22`, background: "rgba(0,6,20,0.6)" }}>
+                style={{ border: `1px solid ${sc}28`, background: "rgba(0,6,20,0.65)" }}>
 
                 {/* Job header */}
                 <button
                   onClick={() => setExpandedJob(isExpanded ? null : job.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left"
-                  style={{ background: `${sc}06` }}>
+                  className="w-full flex items-center justify-between px-4 py-3.5 text-left"
+                  style={{ background: `${sc}08` }}>
                   <div className="flex items-center gap-3">
                     {isRunning
-                      ? <Loader2 size={13} className="animate-spin" style={{ color: sc }} />
+                      ? <Loader2 size={15} className="animate-spin" style={{ color: sc }} />
                       : job.status === "success"
-                        ? <CheckCircle2 size={13} style={{ color: sc }} />
-                        : <XCircle size={13} style={{ color: sc }} />
+                        ? <CheckCircle2 size={15} style={{ color: sc }} />
+                        : <XCircle size={15} style={{ color: sc }} />
                     }
                     <div>
-                      <span className="data-value text-[11px] font-semibold"
-                        style={{ color: "rgba(226,232,240,0.9)" }}>
+                      <span className="data-value text-sm font-semibold"
+                        style={{ color: "rgba(226,232,240,0.95)" }}>
                         {job.siteName}
                       </span>
-                      <span className="data-value text-[9px] ml-2" style={{ color: "rgba(71,85,105,0.7)" }}>
+                      <span className="text-xs ml-2" style={{ color: "rgba(148,163,184,0.65)" }}>
                         {PROVISIONING_TEMPLATES.find(t => t.id === job.templateId)?.name ?? job.templateId}
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="data-value text-[8.5px]" style={{ color: sc }}>
+                    <span className="data-value text-xs font-semibold" style={{ color: sc }}>
                       {job.status.toUpperCase()}
                     </span>
-                    <span className="data-value text-[8px]" style={{ color: "rgba(71,85,105,0.5)" }}>
+                    <span className="text-xs" style={{ color: "rgba(148,163,184,0.55)" }}>
                       {new Date(job.startedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
                     </span>
-                    <span style={{ color: "rgba(71,85,105,0.5)" }}>
-                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    <span style={{ color: "rgba(148,163,184,0.55)" }}>
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </span>
                   </div>
                 </button>
 
                 {/* Steps terminal */}
                 {isExpanded && (
-                  <div className="px-4 pb-3 pt-1">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Terminal size={9} style={{ color: "rgba(79,70,229,0.5)" }} />
-                      <span className="data-value text-[8px] tracking-widest"
-                        style={{ color: "rgba(71,85,105,0.5)" }}>
+                  <div className="px-4 pb-4 pt-2">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Terminal size={11} style={{ color: "rgba(79,70,229,0.7)" }} />
+                      <span className="data-value text-xs tracking-widest"
+                        style={{ color: "rgba(148,163,184,0.6)" }}>
                         RouterOS · {job.hardware}
                       </span>
                     </div>
 
-                    <div className="space-y-1 font-mono text-[9px]">
+                    <div className="space-y-1.5 font-mono text-xs">
                       {liveJob.steps.map((step, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="flex-shrink-0 mt-0.5 w-3">
-                            {step.status === "success" ? <CheckCircle2 size={9} style={{ color: "#10B981" }} />
-                             : step.status === "running" ? <Loader2 size={9} className="animate-spin" style={{ color: "#4F46E5" }} />
-                             : step.status === "error"   ? <XCircle size={9} style={{ color: "#F43F5E" }} />
-                             : <span style={{ color: "rgba(71,85,105,0.4)" }}>·</span>}
+                          <span className="flex-shrink-0 mt-0.5 w-3.5">
+                            {step.status === "success" ? <CheckCircle2 size={11} style={{ color: "#10B981" }} />
+                             : step.status === "running" ? <Loader2 size={11} className="animate-spin" style={{ color: "#4F46E5" }} />
+                             : step.status === "error"   ? <XCircle size={11} style={{ color: "#F43F5E" }} />
+                             : <span style={{ color: "rgba(100,116,139,0.5)" }}>·</span>}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <span style={{ color: step.status === "pending" ? "rgba(71,85,105,0.5)" : "rgba(148,163,184,0.8)" }}>
+                            <span style={{ color: step.status === "pending" ? "rgba(100,116,139,0.6)" : "rgba(203,213,225,0.9)" }}>
                               {step.label}
                             </span>
                             {step.status !== "pending" && (
-                              <span className="ml-2 text-[8px]"
-                                style={{ color: "rgba(71,85,105,0.55)" }}>
-                                › <span style={{ color: "rgba(79,70,229,0.6)" }}>{step.command}</span>
+                              <span className="ml-2 text-[11px]"
+                                style={{ color: "rgba(100,116,139,0.65)" }}>
+                                › <span style={{ color: "rgba(129,140,248,0.75)" }}>{step.command}</span>
                               </span>
                             )}
                             {step.log && (
-                              <span className="ml-2 text-[8px]" style={{ color: "#10B981" }}>
+                              <span className="ml-2 text-[11px]" style={{ color: "#10B981" }}>
                                 ✓ {step.log}
                               </span>
                             )}
@@ -536,10 +661,10 @@ export default function ProvisioningView() {
                     </div>
 
                     {liveJob.status === "success" && liveJob.completedAt && (
-                      <div className="mt-3 pt-2 border-t flex items-center gap-2"
-                        style={{ borderColor: "rgba(16,185,129,0.15)" }}>
-                        <CheckCircle2 size={10} style={{ color: "#10B981" }} />
-                        <span className="data-value text-[9px]" style={{ color: "#10B981" }}>
+                      <div className="mt-4 pt-3 border-t flex items-center gap-2"
+                        style={{ borderColor: "rgba(16,185,129,0.2)" }}>
+                        <CheckCircle2 size={12} style={{ color: "#10B981" }} />
+                        <span className="text-xs" style={{ color: "#10B981" }}>
                           Sitio aprovisionado exitosamente — disponible en CORE-Map
                         </span>
                       </div>
@@ -560,9 +685,9 @@ export default function ProvisioningView() {
 function ProvStat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="text-center">
-      <div className="data-value text-[18px] font-bold tabular-nums leading-tight"
-        style={{ color, textShadow: `0 0 10px ${color}50` }}>{value}</div>
-      <div className="data-value text-[8px] tracking-widest" style={{ color: "rgba(71,85,105,0.6)" }}>{label}</div>
+      <div className="data-value text-2xl font-bold tabular-nums leading-tight"
+        style={{ color, textShadow: `0 0 12px ${color}55` }}>{value}</div>
+      <div className="data-value text-[11px] tracking-widest mt-0.5" style={{ color: "rgba(148,163,184,0.65)" }}>{label}</div>
     </div>
   );
 }
@@ -570,10 +695,10 @@ function ProvStat({ label, value, color }: { label: string; value: number; color
 function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <div className="flex items-center gap-2 pt-1">
-      <span style={{ color: "rgba(79,70,229,0.6)" }}>{icon}</span>
-      <span className="data-value text-[9px] tracking-widest uppercase"
-        style={{ color: "rgba(79,70,229,0.65)" }}>{label}</span>
-      <div className="flex-1 h-px" style={{ background: "rgba(79,70,229,0.12)" }} />
+      <span style={{ color: "rgba(99,102,241,0.85)" }}>{icon}</span>
+      <span className="data-value text-xs tracking-widest uppercase font-semibold"
+        style={{ color: "rgba(129,140,248,0.9)" }}>{label}</span>
+      <div className="flex-1 h-px" style={{ background: "rgba(79,70,229,0.2)" }} />
     </div>
   );
 }
@@ -581,8 +706,8 @@ function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string })
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="data-value text-[8.5px] tracking-widest uppercase block"
-        style={{ color: "rgba(71,85,105,0.65)" }}>{label}</label>
+      <label className="data-value text-[11px] tracking-widest uppercase block font-medium"
+        style={{ color: "rgba(148,163,184,0.8)" }}>{label}</label>
       {children}
     </div>
   );

@@ -2,9 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "export",      // Genera /out estático — compatible con Cloudflare Pages
+  // "output: export" removido — el proyecto ahora tiene API routes server-side
+  // (proxy MikroTik RouterOS). Desplegar en Vercel o VPS con Node.js.
   images: {
-    unoptimized: true,   // Requerido para export estático
+    unoptimized: true,
   },
 };
 
