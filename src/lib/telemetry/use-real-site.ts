@@ -271,6 +271,7 @@ export function useRealSite({
       );
 
       // 🔍 DEBUG TEMPORAL — borrar después de resolver
+      console.log(`[useRealSite:${config.siteId}] addresses raw=`, JSON.stringify(addresses).slice(0, 300));
       console.log(`[useRealSite:${config.siteId}] ipMap=`, Object.fromEntries(ipMap));
       console.log(`[useRealSite:${config.siteId}] publicIpMap=`, Object.fromEntries(publicIpMap));
       console.log(`[useRealSite:${config.siteId}] wanIfaces=`, wanIfaces.map(i => i.name));
