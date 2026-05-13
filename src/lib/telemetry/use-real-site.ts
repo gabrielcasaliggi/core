@@ -270,6 +270,11 @@ export function useRealSite({
         !rosBoolean(iface.disabled) && publicIpMap.has(iface.name),
       );
 
+      // 🔍 DEBUG TEMPORAL — borrar después de resolver
+      console.log(`[useRealSite:${config.siteId}] ipMap=`, Object.fromEntries(ipMap));
+      console.log(`[useRealSite:${config.siteId}] publicIpMap=`, Object.fromEntries(publicIpMap));
+      console.log(`[useRealSite:${config.siteId}] wanIfaces=`, wanIfaces.map(i => i.name));
+
       const wanInterfaces: WanInterface[] = wanIfaces.map((iface) => {
         const rxBytes = parseInt(iface["rx-byte"] ?? "0", 10);
         const txBytes = parseInt(iface["tx-byte"] ?? "0", 10);
