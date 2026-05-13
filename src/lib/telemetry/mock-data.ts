@@ -1,7 +1,12 @@
 import type { NetworkSnapshot, WanInterface, FirewallLog, VpnUser, ProvisioningTemplate, ProvisioningJob } from "@/types/telemetry";
 
+// Timestamp fijo para evitar mismatch SSR/cliente en hidratación.
+// Los ticks reales lo actualizan vía use-telemetry después del mount.
+const MOCK_TS    = "2026-01-01T00:00:00.000Z";
+const MOCK_BASE  = new Date(MOCK_TS).getTime();
+
 export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
-  timestamp: new Date().toISOString(),
+  timestamp: MOCK_TS,
   globalResilienceScore: 87,
   sites: [
     // ── Casa Central (Batán) ──────────────────────────────────────────
@@ -16,7 +21,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       connectedDevices: 142,
       activeUsers: 89,
       firewallEnabled: true,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: MOCK_TS,
       links: [
         {
           id: "link-hq-fiber-1",
@@ -68,7 +73,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       connectedDevices: 34,
       activeUsers: 22,
       firewallEnabled: true,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: MOCK_TS,
       links: [
         {
           id: "link-obrador-radio",
@@ -108,7 +113,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       connectedDevices: 28,
       activeUsers: 15,
       firewallEnabled: true,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: MOCK_TS,
       links: [
         {
           id: "link-studio-fiber",
@@ -148,7 +153,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       connectedDevices: 45,
       activeUsers: 31,
       firewallEnabled: true,
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: MOCK_TS,
       links: [
         {
           id: "link-sucursal-fiber",
@@ -195,7 +200,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       siteId: "site-obrador",
       severity: "warning",
       message: "Detectada falla masiva en enlace Radio (Personal). ¿Desea mover 100% arquitectura a espejo soberano satelital?",
-      timestamp: new Date(Date.now() - 18 * 60000).toISOString(),
+      timestamp: new Date(MOCK_BASE - 18 * 60000).toISOString(),
       acknowledged: false,
     },
     {
@@ -203,7 +208,7 @@ export const MOCK_NETWORK_SNAPSHOT: NetworkSnapshot = {
       siteId: "site-obrador",
       severity: "info",
       message: "Latencia Starlink incrementada: 38ms (umbral: 50ms)",
-      timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
+      timestamp: new Date(MOCK_BASE - 5 * 60000).toISOString(),
       acknowledged: false,
     },
   ],
@@ -320,7 +325,7 @@ export const MOCK_WAN_INTERFACES: WanInterface[] = [
 // Cuando se integre RouterOS: /log print where topics~"firewall"
 
 const T = (minAgo: number) =>
-  new Date(Date.now() - minAgo * 60 * 1000).toISOString();
+  new Date(MOCK_BASE - minAgo * 60 * 1000).toISOString();
 
 export const MOCK_FIREWALL_LOGS: FirewallLog[] = [
   { id: "fw-001", timestamp: T(2),   srcIP: "45.146.164.231",  dstIP: "200.45.67.89",    protocol: "TCP",   dstPort: 22,   action: "drop",   chain: "input",   threat: "bruteforce", severity: "critical", siteId: "site-hq",      country: "RU" },
@@ -381,7 +386,7 @@ export const PROVISIONING_TEMPLATES: ProvisioningTemplate[] = [
 
 // ── Historial de provisionings realizados ─────────────────────────────────────
 
-const J = (minAgo: number) => new Date(Date.now() - minAgo * 60 * 1000).toISOString();
+const J = (minAgo: number) => new Date(MOCK_BASE - minAgo * 60 * 1000).toISOString();
 
 export const MOCK_PROVISIONING_HISTORY: ProvisioningJob[] = [
   {

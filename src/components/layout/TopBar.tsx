@@ -11,9 +11,10 @@ interface TopBarProps {
 }
 
 export default function TopBar({ alerts, globalScore }: TopBarProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -58,11 +59,9 @@ export default function TopBar({ alerts, globalScore }: TopBarProps) {
         <div className="flex items-center gap-1.5 text-slate-500">
           <Clock size={12} />
           <span className="font-mono text-xs tabular-nums">
-            {currentTime.toLocaleTimeString("es-AR", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
+            {currentTime
+              ? currentTime.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+              : "--:--:--"}
           </span>
         </div>
 

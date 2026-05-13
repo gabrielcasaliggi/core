@@ -164,10 +164,9 @@ export function useTelemetry({
   intervalMs = 5000,
   paused = false,
 }: UseTelemetryOptions = {}): NetworkSnapshot {
-  const [snapshot, setSnapshot] = useState<NetworkSnapshot>(() => ({
-    ...MOCK_NETWORK_SNAPSHOT,
-    timestamp: new Date().toISOString(),
-  }));
+  // Usar el timestamp del mock estático para que SSR y cliente
+  // tengan el mismo estado inicial y no haya mismatch de hidratación.
+  const [snapshot, setSnapshot] = useState<NetworkSnapshot>(MOCK_NETWORK_SNAPSHOT);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

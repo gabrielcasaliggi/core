@@ -12,8 +12,9 @@ interface HudTopBarProps {
 }
 
 export default function HudTopBar({ alerts, globalScore, missionMode, onMobileMenuToggle }: HudTopBarProps) {
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -113,7 +114,7 @@ export default function HudTopBar({ alerts, globalScore, missionMode, onMobileMe
         <div className="hidden sm:flex items-center gap-1.5" style={{ color: "rgba(71,85,105,0.55)" }}>
           <Clock size={11} />
           <span className="data-value text-[11px] tabular-nums tracking-widest">
-            [ {now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} ]
+            [ {now ? now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"} ]
           </span>
         </div>
 
