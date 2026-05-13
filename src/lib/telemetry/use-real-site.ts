@@ -383,8 +383,7 @@ export function useRealSite({
         .slice(0, 50);   // máximo 50 entradas recientes
 
       let resilienceScore = 100;
-      if (siteStatus === "offline")   resilienceScore = 0;
-      else if (siteStatus === "degraded") resilienceScore -= 25;
+      if (siteStatus === "degraded") resilienceScore -= 25;
       if (cpuLoad > 80)    resilienceScore -= 15;
       if (ramUsedPct > 85) resilienceScore -= 10;
       resilienceScore = Math.max(0, Math.min(100, Math.round(resilienceScore)));
