@@ -267,10 +267,12 @@ export function useRealSite({
 
       // ── Fallback: tabla de rutas → default route indica la interfaz WAN ──
       // Útil cuando /ip/address no devuelve IPs dinámicas (PPPoE, LTE, DHCP)
+      console.log(`[useRealSite:${config.siteId}] routeTable raw=`, JSON.stringify(routeTable).slice(0, 400));
       if (publicIpMap.size === 0) {
         const defaultRoutes = (routeTable as RosRoute[]).filter(
           r => r["dst-address"] === "0.0.0.0/0" && rosBoolean(r.active) && !rosBoolean(r.disabled),
         );
+        console.log(`[useRealSite:${config.siteId}] defaultRoutes=`, JSON.stringify(defaultRoutes).slice(0, 400));
         defaultRoutes.sort((a, b) => parseInt(a.distance ?? "1") - parseInt(b.distance ?? "1"));
         for (const route of defaultRoutes) {
           const gw    = route.gateway ?? "";
@@ -278,16 +280,17 @@ export function useRealSite({
           // gateway que empieza con letra → nombre de interfaz (ej: "pppoe-out1")
           const ifaceName = /^[a-zA-Z]/.test(gw) && !gw.includes(".") ? gw : iface;
           if (ifaceName) {
-            // Intentar obtener IP desde ipMap (puede tener private/dynamic)
             publicIpMap.set(ifaceName, ipMap.get(ifaceName) ?? "—");
           }
         }
+        console.log(`[useRealSite:${config.siteId}] publicIpMap after fallback=`, Object.fromEntries(publicIpMap));
       }
 
       // ── WAN interfaces: cualquier interfaz en publicIpMap, no disabled ────
       const wanIfaces = (ifaces as RosInterface[]).filter(iface =>
         !rosBoolean(iface.disabled) && publicIpMap.has(iface.name),
       );
+      console.log(`[useRealSite:${config.siteId}] wanIfaces final=`, wanIfaces.map(i => i.name));
 
       const wanInterfaces: WanInterface[] = wanIfaces.map((iface) => {
         const rxBytes = parseInt(iface["rx-byte"] ?? "0", 10);
