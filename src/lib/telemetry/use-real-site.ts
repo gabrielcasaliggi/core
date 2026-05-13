@@ -232,20 +232,24 @@ export function useRealSite({
   const poll = useCallback(async () => {
     const client = ros.current;
     try {
-      // Llamadas paralelas para minimizar latencia total
-      const [identity, resource, ifaces, addresses, pppActive, dhcpLeases, wgPeers, healthItems, routeTable, fwLogs] =
+      // Snapshot (identity+resource+interfaces+ip_addresses+ip_routes) en una
+      // sola llamada server-side para no saturar conexiones concurrentes RouterOS.
+      // El resto de endpoints (ppp, dhcp, logs) se piden en paralelo.
+      const [snap, pppActive, dhcpLeases, wgPeers, healthItems, fwLogs] =
         await Promise.all([
-          client.identity(),
-          client.resource(),
-          client.interfaces(),
-          client.ipAddresses().catch(() => [] as RosIPAddress[]),
+          client.snapshot(),
           client.pppActive().catch(() => [] as RosPPPActive[]),
           client.dhcpLeases().catch(() => []),
           client.wireguardPeers().catch(() => [] as RosWireGuardPeer[]),
           client.health().catch(() => [] as RosHealthItem[]),
-          client.routes().catch(() => [] as RosRoute[]),
           client.logs("firewall").catch(() => [] as RosLog[]),
         ]);
+
+      const identity    = snap.identity;
+      const resource    = snap.resource;
+      const ifaces      = snap.interfaces   ?? [];
+      const addresses   = snap.ip_addresses ?? [];
+      const routeTable  = snap.ip_routes    ?? [];
 
       const now = Date.now();
 

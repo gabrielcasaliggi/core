@@ -171,11 +171,22 @@ async function rosGet<T>(
  * El routerId debe coincidir con el prefijo ROUTER_<ID>_* en .env.local,
  * excepto "office" que sigue usando el proxy legacy /api/mikrotik/*.
  */
+export interface RosSnapshot {
+  identity:     RosIdentity;
+  resource:     RosResource;
+  interfaces:   RosInterface[];
+  ip_addresses: RosIPAddress[];
+  ip_routes:    RosRoute[];
+}
+
 export function createMikrotikClient(routerId = "office") {
   const g = <T>(path: string, params?: Record<string, string>) =>
     rosGet<T>(path, routerId, params);
 
   return {
+    /** Snapshot agregado: identity+resource+interfaces+ip_addresses+ip_routes
+     *  en una sola llamada server-side para evitar el límite de conexiones RouterOS. */
+    snapshot:      () => g<RosSnapshot>("snapshot"),
     identity:      () => g<RosIdentity>("system/identity"),
     resource:      () => g<RosResource>("system/resource"),
     interfaces:    () => g<RosInterface[]>("interface"),
