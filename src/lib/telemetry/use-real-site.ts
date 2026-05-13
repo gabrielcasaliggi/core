@@ -258,10 +258,13 @@ export function useRealSite({
       }
 
       // ── WAN interfaces ────────────────────────────────────────────────────
-      // Solo incluir interfaces físicas que tienen IP asignada en RouterOS.
-      // Filtra automáticamente puertos sin cable y bridges internos.
+      // Incluir interfaces físicas que estén running (con o sin IP estática).
+      // Cubre DHCP client en ether1, PPPoE, LTE, etc.
       const wanIfaces = (ifaces as RosInterface[]).filter(
-        iface => isPhysicalWan(iface) && ipMap.has(iface.name),
+        iface =>
+          isPhysicalWan(iface) &&
+          !rosBoolean(iface.disabled) &&
+          (rosBoolean(iface.running) || ipMap.has(iface.name)),
       );
 
       const wanInterfaces: WanInterface[] = wanIfaces.map((iface) => {
@@ -280,7 +283,7 @@ export function useRealSite({
 
         prevCounters.current.set(iface.name, { rx: rxBytes, tx: txBytes, ts: now });
 
-        const ip = ipMap.get(iface.name) ?? "—";
+        const ip = ipMap.get(iface.name) ?? ipMap.get("ether1") ?? "—";
         const isUp = rosBoolean(iface.running) && !rosBoolean(iface.disabled);
 
         return {
