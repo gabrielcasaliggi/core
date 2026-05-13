@@ -258,14 +258,18 @@ export function useRealSite({
       }
 
       // ── WAN interfaces ────────────────────────────────────────────────────
-      // Incluir interfaces físicas que estén running (con o sin IP estática).
-      // Cubre DHCP client en ether1, PPPoE, LTE, etc.
-      const wanIfaces = (ifaces as RosInterface[]).filter(
-        iface =>
-          isPhysicalWan(iface) &&
-          !rosBoolean(iface.disabled) &&
-          (rosBoolean(iface.running) || ipMap.has(iface.name)),
-      );
+      // Reglas:
+      //   - Excluir disabled y slave (puertos LAN en bridge)
+      //   - ether sin IP directa = puerto físico de PPPoE → excluir
+      //   - pppoe-out / lte / wlan → incluir si running o con IP
+      const wanIfaces = (ifaces as RosInterface[]).filter(iface => {
+        if (rosBoolean(iface.disabled)) return false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (rosBoolean((iface as any).slave)) return false;
+        if (!isPhysicalWan(iface)) return false;
+        if (iface.type === "ether") return ipMap.has(iface.name);
+        return rosBoolean(iface.running) || ipMap.has(iface.name);
+      });
 
       const wanInterfaces: WanInterface[] = wanIfaces.map((iface) => {
         const rxBytes = parseInt(iface["rx-byte"] ?? "0", 10);
@@ -297,7 +301,7 @@ export function useRealSite({
           bandwidthMbps: 100,        // RouterOS no expone ancho contratado
           provider: providerFromIface(iface),
           type: linkTypeFromIface(iface),
-          isPrimary: iface.name === "ether1" || !!iface.comment?.toLowerCase().includes("wan1"),
+          isPrimary: iface.name === "ether1" || iface.type.startsWith("pppoe") || !!iface.comment?.toLowerCase().includes("wan1"),
           siteId: config.siteId,
           uptimePercent: 99.0,       // Solo con histórico real se puede calcular
         } satisfies WanInterface;
