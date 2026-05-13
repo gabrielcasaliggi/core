@@ -345,10 +345,17 @@ export function useRealSite({
         }));
 
       // ── Site status y resilience ───────────────────────────────────────────
+      // Si el router respondió (llegamos aquí), está al menos operativo.
+      // El estado se degrada solo si hay interfaces WAN detectadas y caídas.
       const runningWan = wanIfaces.filter(i => rosBoolean(i.running) && !rosBoolean(i.disabled));
       const siteStatus: SiteStatus =
-        runningWan.length === 0 ? "offline" :
-        runningWan.length < wanIfaces.length ? "degraded" : "operational";
+        wanIfaces.length === 0
+          ? "operational"                              // sin WAN detectada, pero router responde
+          : runningWan.length === 0
+            ? "degraded"                               // WAN detectada pero todas caídas
+            : runningWan.length < wanIfaces.length
+              ? "degraded"
+              : "operational";
 
       const cpuLoad = parseInt(resource["cpu-load"] ?? "0", 10);
       const memFree  = parseInt(resource["free-memory"]  ?? "0", 10);
