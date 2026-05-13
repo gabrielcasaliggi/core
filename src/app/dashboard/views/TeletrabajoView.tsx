@@ -138,7 +138,7 @@ export default function TeletrabajoView() {
               <div className="flex items-center gap-1.5">
                 <Clock size={9} style={{ color: "rgba(71,85,105,0.5)" }} />
                 <span className="data-value text-[10px] tabular-nums font-medium"
-                  style={{ color: "rgba(148,163,184,0.8)" }}>
+                  style={{ color: "rgba(148,163,184,0.8)" }} suppressHydrationWarning>
                   [ {fmtDuration(user.connectedAt)} ]
                 </span>
               </div>

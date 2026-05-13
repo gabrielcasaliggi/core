@@ -125,7 +125,8 @@ export default function ResilienciaView() {
             <MapKpi icon={<Server size={10} />}      label="Sitios"   value={`[ ${data.sites.length} activos ]`}  color="#06B6D4" />
             <MapKpi icon={<Globe2 size={10} />}      label="Score"    value={`[ ${data.globalResilienceScore}% ]`} color={scoreColor} />
           </div>
-          <span className="data-value text-[9px]" style={{ color: "rgba(71,85,105,0.6)" }}>
+          <span className="data-value text-[9px]" style={{ color: "rgba(71,85,105,0.6)" }}
+            suppressHydrationWarning>
             {new Date(data.timestamp).toLocaleTimeString("es-AR")}
           </span>
         </div>

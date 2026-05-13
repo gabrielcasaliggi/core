@@ -155,7 +155,8 @@ function LogRow({ log, index }: { log: FirewallLog; index: number }) {
       <div className="flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
           style={{ background: sc, boxShadow: log.severity === "critical" ? `0 0 5px ${sc}` : undefined }} />
-        <span className="data-value text-[9px] tabular-nums" style={{ color: "rgba(100,116,139,0.7)" }}>
+        <span className="data-value text-[9px] tabular-nums" style={{ color: "rgba(100,116,139,0.7)" }}
+          suppressHydrationWarning>
           {new Date(log.timestamp).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
       </div>

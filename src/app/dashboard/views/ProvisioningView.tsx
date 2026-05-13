@@ -632,7 +632,7 @@ export default function ProvisioningView() {
                     <span className="data-value text-xs font-semibold" style={{ color: sc }}>
                       {job.status.toUpperCase()}
                     </span>
-                    <span className="text-xs" style={{ color: "rgba(148,163,184,0.55)" }}>
+                    <span className="text-xs" style={{ color: "rgba(148,163,184,0.55)" }} suppressHydrationWarning>
                       {new Date(job.startedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
                     </span>
                     <span style={{ color: "rgba(148,163,184,0.55)" }}>

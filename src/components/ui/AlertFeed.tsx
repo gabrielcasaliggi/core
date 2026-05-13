@@ -78,7 +78,7 @@ export default function AlertFeed({ alerts }: AlertFeedProps) {
               <Icon size={12} className={cn("flex-shrink-0 mt-0.5", cfg.color)} />
               <div className="flex-1 min-w-0">
                 <p className="text-slate-300 leading-snug">{alert.message}</p>
-                <p className="text-slate-600 font-mono text-[10px] mt-1">
+                <p className="text-slate-600 font-mono text-[10px] mt-1" suppressHydrationWarning>
                   {formatRelative(alert.timestamp)}
                 </p>
               </div>
