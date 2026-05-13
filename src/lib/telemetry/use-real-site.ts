@@ -257,19 +257,18 @@ export function useRealSite({
         }
       }
 
-      // ── WAN interfaces ────────────────────────────────────────────────────
-      // Reglas:
-      //   - Excluir disabled y slave (puertos LAN en bridge)
-      //   - ether sin IP directa = puerto físico de PPPoE → excluir
-      //   - pppoe-out / lte / wlan → incluir si running o con IP
-      const wanIfaces = (ifaces as RosInterface[]).filter(iface => {
-        if (rosBoolean(iface.disabled)) return false;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (rosBoolean((iface as any).slave)) return false;
-        if (!isPhysicalWan(iface)) return false;
-        if (iface.type === "ether") return ipMap.has(iface.name);
-        return rosBoolean(iface.running) || ipMap.has(iface.name);
-      });
+      // ── IPs públicas (no RFC1918) → estas determinan las interfaces WAN ─────
+      const publicIpMap = new Map<string, string>();
+      for (const [iface, ip] of ipMap) {
+        if (!ip.startsWith("192.168.") && !ip.startsWith("10.") && !ip.startsWith("172.")) {
+          publicIpMap.set(iface, ip);
+        }
+      }
+
+      // ── WAN interfaces: cualquier interfaz con IP pública, no disabled ──────
+      const wanIfaces = (ifaces as RosInterface[]).filter(iface =>
+        !rosBoolean(iface.disabled) && publicIpMap.has(iface.name),
+      );
 
       const wanInterfaces: WanInterface[] = wanIfaces.map((iface) => {
         const rxBytes = parseInt(iface["rx-byte"] ?? "0", 10);
@@ -287,7 +286,7 @@ export function useRealSite({
 
         prevCounters.current.set(iface.name, { rx: rxBytes, tx: txBytes, ts: now });
 
-        const ip = ipMap.get(iface.name) ?? ipMap.get("ether1") ?? "—";
+        const ip = publicIpMap.get(iface.name) ?? ipMap.get(iface.name) ?? "—";
         const isUp = rosBoolean(iface.running) && !rosBoolean(iface.disabled);
 
         return {
