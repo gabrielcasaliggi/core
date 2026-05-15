@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Wifi, Shield, Clock, Radio, Menu } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, Wifi, Shield, Clock, Radio, Menu, LogOut } from "lucide-react";
 import type { Alert } from "@/types/telemetry";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 interface HudTopBarProps {
   alerts: Alert[];
@@ -12,12 +14,19 @@ interface HudTopBarProps {
 }
 
 export default function HudTopBar({ alerts, globalScore, missionMode, onMobileMenuToggle }: HudTopBarProps) {
+  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  async function handleSignOut() {
+    await getSupabaseClient().auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   const unack      = alerts.filter(a => !a.acknowledged);
   const hasCrit    = unack.some(a => a.severity === "critical");
@@ -135,6 +144,21 @@ export default function HudTopBar({ alerts, globalScore, missionMode, onMobileMe
               style={{ background: alertColor, boxShadow: `0 0 6px ${alertColor}`, animation: "blink 1.2s step-end infinite" }}
             />
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleSignOut()}
+          className="flex items-center gap-1 px-2 py-1 rounded data-value text-[10px] transition-colors"
+          style={{
+            color:      "rgba(148,163,184,0.85)",
+            border:     "1px solid rgba(79,70,229,0.2)",
+            background: "rgba(79,70,229,0.05)",
+          }}
+          title="Cerrar sesión"
+        >
+          <LogOut size={11} />
+          <span className="hidden lg:inline">SALIR</span>
         </button>
       </div>
     </header>

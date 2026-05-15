@@ -5,26 +5,26 @@
  * - createServerClient: para API routes (Next.js server)
  */
 
+import { createBrowserClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Cliente browser — inicialización lazy para no fallar durante el build
- * cuando las env vars aún no están inyectadas.
+ * Cliente browser con cookies de sesión (Supabase Auth + middleware).
  */
-let _browserClient: ReturnType<typeof createClient> | null = null;
+let _browserClient: ReturnType<typeof createBrowserClient> | null = null;
 
 export function getSupabaseClient() {
   if (!_browserClient) {
     const url  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
     if (!url || !anon) throw new Error("Supabase env vars not set");
-    _browserClient = createClient(url, anon);
+    _browserClient = createBrowserClient(url, anon);
   }
   return _browserClient;
 }
 
 /** Alias para compatibilidad con código existente que importa `supabase`. */
-export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+export const supabase = new Proxy({} as ReturnType<typeof createBrowserClient>, {
   get(_target, prop) {
     return (getSupabaseClient() as never as Record<string | symbol, unknown>)[prop];
   },

@@ -41,3 +41,6 @@ next-env.d.ts
 # Cloudflare
 .wrangler/
 .dev.vars
+
+# Vercel CLI build output local
+.vercel/
